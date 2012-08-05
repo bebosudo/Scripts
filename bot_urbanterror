@@ -1,0 +1,42 @@
+#! /bin/bash
+# bebo_sudo's Script
+#
+# place the UrbanTerror folder in your home,
+#+ right this:
+# $HOME/UrbanTerror/
+
+TITOLO1='Scelta Mappa per Giocare a UrbanTerror in Bassa Gravità contro il Computer'
+TITOLO2='Scelta Mappa tra quelle Consigliate'
+
+# inserire nome mappa
+zenity --question --title="$TITOLO1" --text="Scegliere una mappa da un elenco o inserire manualmente il nome della mappa?" --cancel-label="Inserire nome manualmente" --ok-label="Scegliere mappa da elenco" --width=400 --height=125
+
+case $? in
+                 0)
+			#assicurarsi che la mappa sia presente in $HOME/
+                        MAP=`zenity --title="$TITOLO2" --text="Scegliere il nome della mappa tra quelle consigliate:" --list --radiolist --column="" --column="Nome Mappa" FALSE "ut4_abbey" FALSE "ut4_algiers" FALSE "ut4_austria" FALSE "ut4_dressingroom" FALSE "ut4_firingrange" FALSE "ut4_mandolin" FALSE "ut4_ramelle" FALSE "ut4_riyadh" FALSE "ut4_prague" FALSE "ut4_sanc" FALSE "ut4_toxic" FALSE "ut4_uptown" TRUE "ut4_skeetshoot_2010" --width=350 --height=475`;;
+                 1)
+                        MAP=`zenity --entry --title="$TITOLO1" --text="Inserire il nome della mappa da lanciare con i bot in bassa gravità (esclusa l'estensione .pk3)." --entry-text 'nome_mappa'`;;
+                -1)
+                        zenity --info --text="Annullato, chiusura del processo." && exit 0;;
+        esac
+
+
+# ricavo l'architettura del sistema e l'adatto al gioco
+ARC1=`uname -p`
+if [ $ARC1 = 'i686' ]; then
+	ARC2=i386
+else
+	ARC2=$ARC1
+fi
+
+#controllo l'esistenza della mappa
+if [ ! -f q3ut4/$MAP ]; then
+	zenity --info --text="Spiacente, la mappa scelta non è presente nella cartella di sistema."
+else
+	#lancio del gioco
+	#path to the UrT folder
+	$HOME/UrbanTerror/ioUrbanTerror.$ARC2 +sv_pure 0 +g_gametype 3 +devmap $MAP +g_gravity 70 +exec bot.cfg
+fi
+
+# variabile >> \"$FILE\"
