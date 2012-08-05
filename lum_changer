@@ -1,0 +1,19 @@
+#! /bin/bash
+#
+#
+
+TITOLO="Luminosità dello schermo"
+
+LUM=`zenity --title="$TITOLO" --text="Scegliere il grado di intensità:" \
+	--list --radiolist --column="" --column="GRADI" \
+	FALSE "1 (luminosità minore)" FALSE "2" FALSE "3" FALSE "4" FALSE "5" \
+	FALSE "6" TRUE "7" FALSE "8" FALSE "9" FALSE "10 (luminosità maggiore)" \
+	--width=350 --height=400`
+
+if [ $LUM == "1 (luminosità minore)" ]; then
+	$LUM=1
+elif [ $LUM == "10 (luminosità maggiore)" ]; then
+	$LUM=10
+fi
+
+beesu "echo $LUM > /sys/class/backlight/acpi_video0/brightness"
