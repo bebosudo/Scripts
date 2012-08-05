@@ -1,0 +1,20 @@
+#! /bin/bash
+clear
+echo -n "Questo Script aggiornerà il sistema, continuare? [s/n] "; read ANS1
+if [ $ANS1 = s -o $ANS1 = S -o $ANS1 = y -o $ANS1 = Y ]; then
+	echo -n "Controllo la presenza di aggiornamenti" ; sleep 0.75 ; echo -n . ; sleep 0.75 ; echo -n . ; sleep 0.75 ; echo .
+	yum check-update
+	echo -n "Aggiornare, se disponibile, anche il Kernel? [s/n]: " ; read ANS2
+	if [ $ANS2 = s -o $ANS2 = S -o $ANS2 = y -o $ANS2 = Y ]; then
+		echo -n "Dopo aver aggiornato il kernel ricreare la configurazione di Grub2? (Consigliato) [s/n]: " ; read ANS3
+		if [ $ANS3 = s -o $ANS3 = S -o $ANS3 = y -o $ANS3 = Y ] ; then
+			su -c 'yum update -y && grub2-mkconfig -o /boot/grub2/grub.cfg' && echo && echo "	Aggiornamento completato!" && echo && sleep 4
+		else
+			su -c 'yum update -y'
+		fi
+	else
+		su -c 'yum update -y --exclude=kernel'
+	fi
+else
+	echo "Aggiornamento interrotto dall'utente. Arresto dell'esecuzione dello script."
+fi
