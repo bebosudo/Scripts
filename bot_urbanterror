@@ -1,42 +1,94 @@
 #! /bin/bash
 # bebo_sudo's Script
 #
-# place the UrbanTerror folder in your home,
-#+ right this:
-# $HOME/UrbanTerror/
+#
 
-TITOLO1='Scelta Mappa per Giocare a UrbanTerror in Bassa Gravità contro il Computer'
-TITOLO2='Scelta Mappa tra quelle Consigliate'
+FOLDER="$HOME/UrbanTerror" #set here your game folder
 
-# inserire nome mappa
+TITOLO1='UrbanTerror Low Gravity contro il Computer'
+TITOLO2='Selezione Mappa'
+TITOLO3='Livello Difficoltà'
+TITOLO4='Nome Giocatore'
+
+function answer_checker {
+STATUS=$?
+if [ "$STATUS" = "1" ]; then
+	zenity --info --text="Annullato, chiusura del processo."; exit 0
+fi
+}
+
+# nome mappa
 zenity --question --title="$TITOLO1" --text="Scegliere una mappa da un elenco o inserire manualmente il nome della mappa?" --cancel-label="Inserire nome manualmente" --ok-label="Scegliere mappa da elenco" --width=400 --height=125
 
-case $? in
-                 0)
-			#assicurarsi che la mappa sia presente in $HOME/
-                        MAP=`zenity --title="$TITOLO2" --text="Scegliere il nome della mappa tra quelle consigliate:" --list --radiolist --column="" --column="Nome Mappa" FALSE "ut4_abbey" FALSE "ut4_algiers" FALSE "ut4_austria" FALSE "ut4_dressingroom" FALSE "ut4_firingrange" FALSE "ut4_mandolin" FALSE "ut4_ramelle" FALSE "ut4_riyadh" FALSE "ut4_prague" FALSE "ut4_sanc" FALSE "ut4_toxic" FALSE "ut4_uptown" TRUE "ut4_skeetshoot_2010" --width=350 --height=475`;;
-                 1)
-                        MAP=`zenity --entry --title="$TITOLO1" --text="Inserire il nome della mappa da lanciare con i bot in bassa gravità (esclusa l'estensione .pk3)." --entry-text 'nome_mappa'`;;
-                -1)
-                        zenity --info --text="Annullato, chiusura del processo." && exit 0;;
-        esac
-
-
-# ricavo l'architettura del sistema e l'adatto al gioco
-ARC1=`uname -p`
-if [ $ARC1 = 'i686' ]; then
-	ARC2=i386
-else
-	ARC2=$ARC1
+STATUS1=$?
+if [ "$STATUS1" = "0" ]; then
+	MAP=`zenity --title="$TITOLO2" --text="Scegliere il nome della mappa tra quelle consigliate:" --list --radiolist \
+	--column="" --column="Nome Mappa" FALSE "ut4_abbey" FALSE "ut4_algiers" FALSE "ut4_austria" FALSE "ut4_dressingroom" \
+	FALSE "ut4_firingrange" FALSE "ut4_mandolin" TRUE "ut4_riyadh" FALSE "ut4_prague" FALSE "ut4_uptown" \
+	FALSE "ut4_skeetshoot_2010" --width=350 --height=400`
+	# there are several bug on --list option on zenity, so the $? var. doesn't work properly
+elif [ "$STATUS1" = "1" ]; then
+	MAP=`zenity --entry --title="$TITOLO2" \
+	--text="Inserire il nome della mappa da lanciare con i bot in bassa gravità (esclusa l'estensione .pk3)." \
+	--entry-text 'nome_mappa'`
+	answer_checker
 fi
+
+# bot's level
+LEVEL=`zenity --title="$TITOLO3" --text="Scegliere il livello di difficoltà:" --list --radiolist --column="" --column="Livello" \
+	FALSE "1 (novizio)" FALSE "2" FALSE "3" FALSE "4" TRUE "5 (veterano)" --width=300 --height=270`
+	# there are several bug on --list option on zenity, so the $? var. doesn't work properly
+
+if [ "$LEVEL" = "1 (novizio)" ]; then
+	LEVEL=1
+elif [ "$LEVEL" = "5 (veterano)" ]; then
+	LEVEL=5
+fi
+
+# player name
+NAME=`zenity --entry --title="$TITOLO4" --text="Inserire il nome del giocatore." --entry-text 'Unknown_Player'`
+
+answer_checker
+
+# get the system arch and fit to the game
+ARC=`uname -p`
+if [ $ARC = 'i686' ]; then
+	ARC=i386
+fi
+
+function zenity_check {
+zenity --question --title="$TITOLO1" --text="Lanciare il gioco con queste impostazioni?
+Percorso eseguibile: $FOLDER/ioUrbanTerror.$ARC
+Mappa da lanciare: $MAP
+Livello difficoltà dei bot: $LEVEL
+Nome giocatore: $NAME" --height=300
+}
+
+function urt_launcher {
+$FOLDER/ioUrbanTerror.$ARC \
++set com_basegame q3ut4 \
++set fs_basepath /usr/share/q3ut4 \
++set com_hunkMegs 256 +set cl_allowdownload 1 \
++sv_pure 0 +g_gametype 3 +devmap $MAP \
++g_gravity 70 +exec bot$LEVEL.cfg +name $NAME
+}
+
+function all_progs {
+zenity_check
+answer_checker
+urt_launcher
+}
 
 #controllo l'esistenza della mappa
-if [ ! -f q3ut4/$MAP ]; then
-	zenity --info --text="Spiacente, la mappa scelta non è presente nella cartella di sistema."
+if [ "$MAP" = "ut4_abbey" -o "$MAP" = "ut4_algiers" -o "$MAP" = "ut4_austria" -o "$MAP" = "ut4_dressingroom" -o "$MAP" = "ut4_firingrange" \
+	-o "$MAP" = "ut4_mandolin" -o "$MAP" = "ut4_riyadh" -o "$MAP" = "ut4_prague" -o "$MAP" = "ut4_uptown" ]; then
+	all_progs
 else
-	#lancio del gioco
-	#path to the UrT folder
-	$HOME/UrbanTerror/ioUrbanTerror.$ARC2 +sv_pure 0 +g_gametype 3 +devmap $MAP +g_gravity 70 +exec bot.cfg
+	if [ ! -f $FOLDER/q3ut4/$MAP.pk3 ]; then
+		zenity --info --text="Spiacente, la mappa scelta non è presente nella cartella di sistema." --timeout=10 ; exit 0
+	else
+		all_progs
+	fi
 fi
 
-# variabile >> \"$FILE\"
+# variabile --> \"$FILE\"
