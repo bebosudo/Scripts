@@ -2,17 +2,21 @@
 #
 #
 
-TITOLO1="Source Packager for GtkRadiant' RPM"
+TITOLO1="Source Packager for GtkRadiant Fedora RPM"
 
 zenity --question --title="$TITOLO1" --text="$TITOLO1. La connessione è up? Continuare?"
-if [[ $? == 0 ]]; then
-	VERSIONNO=`zenity --entry --title="$TITOLO1" --text="Inserire il numero di versione."`
-	git clone https://github.com/TTimo/GtkRadiant ./gtkradiant
-	cd gtkradiant/
-	rm -rf .git/ .gitignore
-	scons target=setup
-	cd ..
-	tar czvf GtkRadiant-$VERSIONNO.tar.gz gtkradiant/
+STATUS1=$?
+
+VERSIONNO=`zenity --entry --title="$TITOLO1" --text="Inserire il numero di versione."`
+STATUS2=$?
+
+if [ "$STATUS1" = "0" ]; then
+	if [ "$STATUS2" = "0" ]; then
+		gnome-terminal -e "git clone https://github.com/TTimo/GtkRadiant ./gtkradiant && cd gtkradiant/ && \
+		rm -rf .git/ .gitignore && scons target=setup && cd .. && tar czvf GtkRadiant-$VERSIONNO.tar.gz gtkradiant/"
+	else
+		exit 0
+	fi
 else
 	exit 0
 fi
