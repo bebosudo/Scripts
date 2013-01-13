@@ -1,0 +1,249 @@
+#! /bin/bash 
+#
+# Script per l'aggiornamento automatico del sistema + grub2
+#
+#  Author: bebo_sudo <bebo_sudo@fedoraonline.it>
+#
+#  This program is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation; either version 2 of the License, or
+#  (at your option) any later version.
+#  
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#  
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software
+#  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+#  MA 02110-1301, USA.
+#
+
+# If the script doesn't work, try to pass it through dos2unix and then re-launch it
+# dos2unix /path/to/script_name; /path/to/script_name
+#
+# This script does work only with a linux partition scheme with a / and 
+#+ /home partitions separated
+
+#controllo se utente attuale è root
+if [ "$UID" != "0" ]; then
+	echo "È necessario essere root per eseguire lo script"; exit 0
+fi
+
+#controllo se ci sono tutti i programmi necessari
+which grub2-mkconfig &> /dev/null
+if [ $? != "0" ]; then echo "Manca l'applicativo grub2-mkconfig. Impossibile procedere, chiusura."; exit 1; fi
+which rsync &> /dev/null
+if [ $? != "0" ]; then echo "Manca l'applicativo rsync. Impossibile procedere, chiusura."; exit 1; fi
+
+#costanti in cui viene salvato l'indirizzo dove verranno montate le partizioni,
+#(è opzionale modificarle, meglio lasciarle predefinite così)
+BKP_FOLD="/media/FedoraBackup"
+BKP_FOLD_HOME="/media/HomeBackup"
+
+#sostituire questa variabile per indicare la partizione home da cui copiare i file
+HOME_BACKUP="/home/"
+
+#ATTENZIONE! v v v v v v v v v v 
+#sostituire queste costanti con quelle presenti sul proprio sistema ottenibili con `blkid` da root
+#uuid della partizione root:
+UUID_ROOT=""
+#uuid delle partizioni boot e home (se presenti, altrimenti lasciare il campo vuoto così UUID_BOOT=""):
+UUID_HOME=""
+
+#file in cui scrivere temporaneamente le modifiche
+TMP_FILE="$(mktemp -p /tmp)"
+
+#ottengo i nomi delle partizioni tramite blkid
+BLKID_HOME=$(blkid -U "$UUID_HOME")
+BLKID_ROOT=$(blkid -U "$UUID_ROOT")
+#se ci sono problemi a trovare il dispositivo
+if [ "$?" != "0" ]; then echo "Connettere il dispositivo e riprovare."; exit 1; fi
+
+#recupero l'ultimo numero della partizione in cui è installato il sistema
+#NUM_PARTIZIONE=${BLKID_ROOT#${BLKID_ROOT%?}}
+
+function check_exit1 {
+STATUS="$?"
+VOLUME="$1"
+if [ $STATUS != "0" ]; then
+	echo "Volume ${VOLUME} ancora in funzione. Interrompere i processi in uso e riprovare."
+	exit 1
+fi
+}
+
+#smontaggio partizioni
+echo "Smontaggio FileSystem in corso..."
+mount |grep "$BLKID_ROOT" &> /dev/null
+if [ "$?" == "0" ]; then
+	umount $BLKID_ROOT 2> /dev/null
+	check_exit1 $BLKID_ROOT
+fi
+
+mount |grep "$BLKID_HOME" &> /dev/null
+if [ "$?" == "0" ]; then
+	umount $BLKID_HOME 2> /dev/null
+	check_exit1 $BLKID_HOME
+fi
+
+#creazione cartella temporanea in cui montare il filesystem
+if [ -d $BKP_FOLD ]; then
+	if [ $(rmdir $BKP_FOLD 2> /dev/null) ]; then : ; else
+		BKP_FOLD="/media/$RANDOM"
+	fi
+fi
+#creazione cartella temporanea in cui montare la home
+if [ -d $BKP_FOLD_HOME ]; then
+	if [ $(rmdir $BKP_FOLD_HOME 2> /dev/null) ]; then : ; else
+		BKP_FOLD_HOME="/media/$RANDOM"
+	fi
+fi
+
+#montaggio root hd est
+mkdir -p $BKP_FOLD
+echo "Montaggio partizione root $BLKID_ROOT dell'HD esterno..."
+mount -U $UUID_ROOT $BKP_FOLD
+
+#se esiste la partizione home la monta
+if [ "x$UUID_HOME" != "x" ]; then
+	mkdir -p $BKP_FOLD_HOME
+	echo "Montaggio partizione boot $BLKID_HOME dell'HD esterno..."
+	mount -U $UUID_HOME $BKP_FOLD_HOME
+fi
+
+UUID_BOOT2=$UUID_BOOT
+
+echo -e "Inizio processo di backup.\n"
+#copia dei dati nella home
+rsync -arvHu --delete $HOME_BACKUP $BKP_FOLD_HOME
+#copia tutta la cartella root
+rsync -arvHu --delete --exclude={/dev/*,/sys/*,/proc/*,/tmp/*,/mnt/*,/media/*,/lost+found,/home/*} /* $BKP_FOLD
+echo -e "Processo di backup terminato.\n"
+
+#disattivazione file di configurazione di grub al momento inutili (verranno recuperati poi)
+GR_ETC="/etc/grub.d"
+cd $GR_ETC
+mkdir ./temp_dir/
+mv `ls |grep -v temp_dir` ./temp_dir/
+
+#####################################################
+#file di grub2 su cui andare andare a scrivere le modifiche
+#modificare solo l'ultimo campo v v v v v v di QUESTA variabile se si vuole cambiare file per grub2 (opzionale, meglio lasciarlo così)
+#
+#NON MODIFICARLA tra un backup e l'altro. Una volta scelta, lasciare quella. 
+GRUB_CONFIG_FILE="${GR_ETC}/05_hd_esterno"
+#ATTENZIONE: il file verrà sovrascritto e tutti i dati contenuti andranno persi!
+
+#creazione file vuoto GRUB_CONFIG_FILE
+if [ -f $GRUB_CONFIG_FILE ];then
+	rm -f $GRUB_CONFIG_FILE
+fi
+touch $GRUB_CONFIG_FILE
+
+#recupero informazioni generali dai file di config di grub
+. /etc/default/grub
+#è praticamente inutile v v v v v v lasciare commentata
+#. /usr/share/grub/grub-mkconfig_lib
+
+#recupero numero di release di fedora
+#RELEASE_NUM="`cat /etc/system-release |cut -d ' ' -f 3`"
+
+#variabili modificatori di testo
+SED1="s/[^-]*-//"
+#SED2="s/.fc${RELEASE_NUM}.*$//"
+
+#elenco kernel
+echo "Recupero informazioni sui kernel installati."
+#rpm -qa kernel |uniq |sed -e "${SED1}" |uniq |sort -rV > $TMP_FILE
+ls /boot/* |grep "vmlinuz-" |uniq |sed -e "${SED1}" |uniq |sort -rV > $TMP_FILE
+
+#numero di kernel
+NUM_KERNEL="$(cat $TMP_FILE |wc -l)"
+#lista di versioni kernel
+LISTA_KERNEL="$(cat $TMP_FILE |paste -s -d ' ')"
+
+echo -e "Inizio aggiornamento di grub2.\n"
+#######################################################################################################################
+
+#prima parte menu di grub
+echo -e "#! /bin/bash\n#\n\necho 'Trovato HD esterno' >&2\ncat << FOE\nset timeout='${GRUB_TIMEOUT}'\nset default='0'\n" > $GRUB_CONFIG_FILE
+
+#per ogni kernel presente sul sistema crea la voce di boot normale e recovery
+for KERNEL in $LISTA_KERNEL; do
+
+#testa se esistono i file vmlinuz e initramfs, se non ci sono salta un giro di for
+test -f /boot/vmlinuz-$KERNEL || continue
+test -f /boot/initramfs-$KERNEL || continue
+
+function paster {
+cat << EOF >> $GRUB_CONFIG_FILE
+menuentry '${GRUB_NOME_DISTRO}' --class fedora --class gnu-linux --class gnu --class os {
+   set gfxpayload=keep
+   insmod gzio
+   insmod part_msdos
+   insmod ext2
+   set root='(hd0,msdos3)'
+   search --no-floppy --fs-uuid --set=root ${UUID_BOOT2}
+   echo 'Loading Fedora su HD esterno...'
+   linux /boot/vmlinuz-${KERNEL} root=UUID=${UUID_ROOT} ro ${OPZIONI_KERNEL}
+   echo 'Loading initial ramdisk ...'
+   initrd /boot/initramfs-${KERNEL}
+}
+EOF
+}
+
+#voce menu grub "normale" v v v v v
+#recupero delle variabili dal file /etc/default/grub caricato prima
+GRUB_NOME_DISTRO="$GRUB_DISTRIBUTOR $RELEASE_NUM su HD esterno"
+OPZIONI_KERNEL="${GRUB_CMDLINE_LINUX}"
+paster
+
+#voce menu grub "recovery" v v v v v
+GRUB_NOME_DISTRO="${GRUB_NOME_DISTRO} (recovery)"
+OPZIONI_KERNEL="$OPZIONI_KERNEL single"
+paster
+
+done
+
+#chiusura script $GRUB_CONFIG_FILE
+echo "FOE" >> $GRUB_CONFIG_FILE
+#########################################
+
+echo -e "Processo di aggiornamento di grub2 terminato.\n"
+
+#pulizia file ormai inutili
+rm -f $TMP_FILE
+
+#lancio grub2 verso hd esterno
+grub2-mkconfig -o $BKP_FOLD/boot/grub2/grub.cfg
+
+#rimuovo file $GRUB_CONFIG_FILE ora inutile
+rm -f $GRUB_CONFIG_FILE
+
+#ripristino i file di grub su hd originale
+cd $GR_ETC/temp_dir/
+mv * ../
+cd $HOME
+rmdir $GR_ETC/temp_dir/ &> /dev/null || rm -rf $GR_ETC/temp_dir/ &> /dev/null
+
+function check_exit2 {
+if [ $? != "0" ]; then echo "Volume ${1} ancora in uso. Attendere il termine dei processi e riprovare manualmente a smontare le partizioni."; exit 1; fi
+}
+
+#smontaggio filesystems usati
+umount $BLKID_BOOT &> /dev/null
+check_exit2 $BLKID_BOOT
+umount $BLKID_HOME  &> /dev/null
+check_exit2 $BLKID_HOME
+umount $BLKID_ROOT &> /dev/null
+check_exit2 $BLKID_ROOT
+echo "Smontati tutti i FileSystem correttamente."
+
+#elimino cartella temporanea in /media
+rmdir $BKP_FOLD/ &> /dev/null || echo -e "\nImpossibile rimuovere la directory $BKP_FOLD, provare manualmente."; exit 1
+rmdir $BKP_FOLD_HOME/ &> /dev/null || echo -e "\nImpossibile rimuovere la directory $BKP_FOLD_HOME, provare manualmente."; exit 1
+
+#messaggio di chiusura
+echo "Backup effettuato, chiusura dello script."
+exit 0
