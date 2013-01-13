@@ -145,12 +145,14 @@ function zenity_check {
   }
 } #close the all_zenity function
 
+
 # urbanterror launcher with bots and other game vars
 function urt_launcher {
 $FOLDER/ioUrbanTerror.$ARC +set com_basegame q3ut4 +set fs_basepath /usr/share/q3ut4 \
 +set com_hunkMegs 256 +set cl_allowdownload 1 +sv_pure 0 +g_gametype 3 +devmap $MAP \
 +g_gravity 70 +exec bot$LEVEL.cfg +name $NAME
 }
+
 
 #check if user inserted all vars in
 if [ $ZEN_STATUS != "1" ]; then
@@ -171,14 +173,13 @@ else
 		case "$1" in
 			-p|--path-to-exec)	EXEC=$2 ; shift ; shift ;;
 			-m|--map)		MAP=$2	; shift ; shift ;;
-			-b|--bot--level)	LEVEL=$2; shift ; shift ;;
+			-b|--bot-level)	LEVEL=$2; shift ; shift ;;
 			-n|--name)		NAME=$2 ; shift ; shift ;;
 			-h|--help)		show_help ; exit $? ;;
 			-v|--version)		show_version ; exit $? ;;
 			--*|*)
 				echo "$(usage)"
-				echo
-				echo "$UNKNOWN_OPT"
+				echo -e "\n${UNKNOWN_OPT}"
 				exit 1
 			
 		esac
@@ -188,7 +189,7 @@ fi
 #check if bot level is a number from 1 to 5
 case $LEVEL in
 	[12345]) LEVEL=$LEVEL ;;
-	*)	echo "$(usage)"; echo; echo "$BOT_LEVEL_SCRIPT"; exit 1 ;;
+	*)	echo "$(usage)"; echo -e "\n${BOT_LEVEL_SCRIPT}"; exit 1 ;;
 esac
 
 #collect toghether all functions
@@ -197,8 +198,7 @@ if [ $ZEN_STATUS = "1" ]; then
 	zenity_check
 	answer_checker
 fi 
-#urt_launcher
-echo "lancio gioco"
+urt_launcher
 }
 
 #this text has to be put here bz the vars doesn't exist before
